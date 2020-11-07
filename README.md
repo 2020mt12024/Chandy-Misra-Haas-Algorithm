@@ -1,6 +1,6 @@
 # Chandy-Misra-Haas-Algorithm
 Chandy-Misra-Haas-Algorithm (OR Model) for  Deadlock Detection in Distributed Systems
-# Pre-Requisite Java Compiler
+//Pre-Requisite Java Compiler
 * Keep both the StartProcess.java & icon.png in same location.
 * The wait-for-graph is present between lines 18-23 as per WFG.png. (There are 6 processes considered)
   * The index, process name, port number pair follow 0,A,1000 - 1,B,2000 - 2,C,3000 - ... pattern
