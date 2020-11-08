@@ -5,6 +5,7 @@ import java.io.*;
 import java.awt.event.*;
 import java.util.*;
 import java.lang.*;
+import javax.swing.text.*;
  
 public class StartProcess {              
     public static void main(String[] args) throws InterruptedException {
@@ -20,24 +21,38 @@ class Process extends JFrame{
 		{0,0,0,1,1,0},
 		{0,0,0,0,1,0},
 		{0,0,0,0,0,1},
-		{1,0,0,0,0,0}
+		{0,0,1,0,0,0}
 	};         
 
 	private final JLabel cmhOR = new JLabel("Deadlock detection Chandy-Misra-Haas Algorithm for the OR model");
 	private final JLabel logLabel = new JLabel("Log");
 	private final JLabel statusBar = new JLabel("By Shruti Sagar Mohanta (2020MT12024)");
 	private final JButton initDLD = new JButton("<html>Initiate <br/>Deadlock <br/>Detection</html>");
-	private final JTextArea logArea = new JTextArea();
+	//private final JTextArea logArea = new JTextArea();
+	private final JTextPane logArea = new JTextPane();
+	
+	private final SimpleAttributeSet formatInit = new SimpleAttributeSet();
+	
+	private final SimpleAttributeSet formatQuerySend = new SimpleAttributeSet();
+	private final SimpleAttributeSet formatReplySend = new SimpleAttributeSet();
+	private final SimpleAttributeSet formatDeadlock = new SimpleAttributeSet();
+	private final SimpleAttributeSet formatQueryReceive = new SimpleAttributeSet();
+	private final SimpleAttributeSet formatReplyReceive = new SimpleAttributeSet();
+	
+	
+	private final StyledDocument styleDoc = logArea.getStyledDocument();
 	private DatagramSocket dgSocket;
 	private Boolean[] waitFlag = new Boolean[wfg[0].length]; 
 	private int[] num = new int[wfg[0].length]	;
 	private final String processName;
-	private ArrayList<String> waitProcessName = new ArrayList<String>();
+	private ArrayList<String> dependentSet = new ArrayList<String>();
 	private ArrayList<String> engagingQuerySender = new ArrayList<String>();
 	private int querySend;
 	private int replyReceive;
 	Random rnd = new Random();
-           
+	File logFile;
+	PrintStream pStream;
+	    
 	public Process (String pName, int port){
 		super("Process: "+pName+" Port: "+port);
 		super.add(cmhOR, BorderLayout.NORTH);
@@ -45,44 +60,60 @@ class Process extends JFrame{
 		super.add(initDLD, BorderLayout.EAST);
 		super.add(new JScrollPane(logArea), BorderLayout.CENTER);
 		super.add(statusBar, BorderLayout.SOUTH);
-		super.setSize(new Dimension(450,350));
+		super.setSize(new Dimension(500,280));
 		super.setVisible(true);
 		super.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		super.setResizable(false);
-		super.setAlwaysOnTop(true);
 		super.setIconImage(new ImageIcon("icon.png").getImage());
 		logArea.setEditable(false);
+		StyleConstants.setForeground(formatInit, Color.BLACK);
+		StyleConstants.setBold(formatInit, true);
+		StyleConstants.setUnderline(formatInit, true);
+		StyleConstants.setForeground(formatQuerySend, Color.BLUE);
+		StyleConstants.setForeground(formatReplySend, Color.MAGENTA);	
+		StyleConstants.setForeground(formatDeadlock, Color.RED);
+		StyleConstants.setForeground(formatQueryReceive, new Color(0, 128, 0));
+		StyleConstants.setForeground(formatReplyReceive, new Color(255, 128, 64));			
+		StyleConstants.setBold(formatDeadlock, true);
 		Arrays.fill(waitFlag,false);
 	    processName = pName;
 		replyReceive = 0;
 		querySend = 0;
 		try{
+			logFile = new File("log.txt");
+			pStream = new PrintStream(logFile);
+			System.setOut(pStream);  
+		}catch(FileNotFoundException ex){
+			System.exit(1);
+		}		
+		try{
 			dgSocket = new DatagramSocket((getIndex(pName)+1)*1000);
+			
 		}catch(SocketException ex){
 			System.exit(1);
 		}
 	   
 		for(int i=0;i < wfg[0].length;++i){
 			if(wfg[getIndex(pName)][i] == 1){
-				waitProcessName.add(getProcessName(i));
+				dependentSet.add(getProcessName(i));
 			}
 		}
 		initDLD.addActionListener((ActionEvent evt) -> {			                            
 			String msg;		   			
-			try{                                         
-				logMsg("Deadlock detection initiated");
-				for(int j=0; j < waitProcessName.size();++j){
-					msg="QUERY-"+pName+","+pName+","+waitProcessName.get(j);
+			try{ 
+				logMsg("Deadlock detection initiated",formatInit);
+				for(int j=0; j < dependentSet.size();++j){
+					msg="QUERY-"+pName+","+pName+","+dependentSet.get(j);
 					byte buff[]=msg.getBytes();
-					DatagramPacket dgPacketSend = new DatagramPacket(buff,buff.length,InetAddress.getLocalHost(),(getIndex(waitProcessName.get(j))+1)*1000);
+					DatagramPacket dgPacketSend = new DatagramPacket(buff,buff.length,InetAddress.getLocalHost(),(getIndex(dependentSet.get(j))+1)*1000);
 					dgSocket.send(dgPacketSend);
 					++querySend;
-					logMsg("\nQUERY("+pName+","+pName+","+waitProcessName.get(j)+") sent to Dependent Process "+waitProcessName.get(j));
+					logMsg("QUERY("+pName+","+pName+","+dependentSet.get(j)+") sent to Dependent Process "+dependentSet.get(j),formatQuerySend);
 				}   
 				waitFlag[getIndex(processName)] = true;  
-				num[getIndex(processName)] = waitProcessName.size();  				
+				num[getIndex(processName)] = dependentSet.size();  				
 			}catch(IOException ex){
-				logMsg(ex.getMessage());
+				logMsg(ex.getMessage(),formatDeadlock);
 			}                                  
 		});    
 
@@ -99,73 +130,72 @@ class Process extends JFrame{
 				String triplet = strMsg.split("-")[1];
 				String initProcessName = triplet.split(",")[0];
 				String senderProcessName = triplet.split(",")[1];
-				String receiverProcessName = triplet.split(",")[2];				
-				logMsg("\n"+msgType+"("+initProcessName+","+senderProcessName+","+receiverProcessName+") received from Process " + senderProcessName);
+				String receiverProcessName = triplet.split(",")[2];	
+				logMsg(msgType+"("+initProcessName+","+senderProcessName+","+receiverProcessName+") received from Process " + senderProcessName,msgType.equals("QUERY") ? formatQueryReceive : formatReplyReceive);
 				String msg;	
-				if(waitProcessName.size() > 0){
+				if(dependentSet.size() > 0){
 					if(msgType.equals("QUERY")){
-						engagingQuerySender.add(senderProcessName);
 						if(waitFlag[getIndex(initProcessName)]){
-							Thread.sleep(100+rnd.nextInt(401));
-							//Send REPLY message
-							if(initProcessName.equals(processName)){//If Initiator is Receiver
-								msg="REPLY-"+initProcessName+","+processName+","+senderProcessName;
-								byte buffreply[]=msg.getBytes();
-								DatagramPacket dgPacketSend = new DatagramPacket(buffreply,buffreply.length,InetAddress.getLocalHost(),(getIndex(senderProcessName)+1)*1000);
-								dgSocket.send(dgPacketSend);
-								logMsg("\nREPLY("+initProcessName+","+processName+","+senderProcessName+") sent to Process "+senderProcessName);
-							}else{//REPLY RECEIVE COUNT == QUERY SEND COUNT for Other Processes
-								if(replyReceive == querySend){
-									msg="REPLY-"+initProcessName+","+processName+","+senderProcessName;
-									byte buffreply[]=msg.getBytes();
-									DatagramPacket dgPacketSend = new DatagramPacket(buffreply,buffreply.length,InetAddress.getLocalHost(),(getIndex(senderProcessName)+1)*1000);
-									dgSocket.send(dgPacketSend);
-									logMsg("\nREPLY("+initProcessName+","+processName+","+senderProcessName+") sent to Process "+senderProcessName);
-								}
-							}
+							Thread.sleep(500+rnd.nextInt(501));
+							//Send REPLY message							
+							msg="REPLY-"+initProcessName+","+processName+","+senderProcessName;
+							byte buffreply[]=msg.getBytes();
+							DatagramPacket dgPacketSend = new DatagramPacket(buffreply,buffreply.length,InetAddress.getLocalHost(),(getIndex(senderProcessName)+1)*1000);
+							dgSocket.send(dgPacketSend);
+							logMsg("REPLY("+initProcessName+","+processName+","+senderProcessName+") sent to Process "+senderProcessName,formatReplySend);							
 						}else{
+							engagingQuerySender.add(senderProcessName);						
 							waitFlag[getIndex(initProcessName)] = true;
-							num[getIndex(processName)] = waitProcessName.size();
-							for(int k=0; k < waitProcessName.size();++k){
-								Thread.sleep(100+rnd.nextInt(401));
-								msg="QUERY-"+initProcessName+","+processName+","+waitProcessName.get(k);
+							num[getIndex(initProcessName)] = dependentSet.size();
+							for(int k=0; k < dependentSet.size();++k){
+								Thread.sleep(500+rnd.nextInt(501));
+								msg="QUERY-"+initProcessName+","+processName+","+dependentSet.get(k);
 								byte buffsend[]=msg.getBytes();
-								DatagramPacket dgPacketSend = new DatagramPacket(buffsend,buffsend.length,InetAddress.getLocalHost(),(getIndex(waitProcessName.get(k))+1)*1000);
+								DatagramPacket dgPacketSend = new DatagramPacket(buffsend,buffsend.length,InetAddress.getLocalHost(),(getIndex(dependentSet.get(k))+1)*1000);
 								dgSocket.send(dgPacketSend);
-								++querySend;
-								logMsg("\nQUERY("+initProcessName+","+processName+","+waitProcessName.get(k)+") sent to Dependent Process "+waitProcessName.get(k));
+								//++querySend;
+								logMsg("QUERY("+initProcessName+","+processName+","+dependentSet.get(k)+") sent to Dependent Process "+dependentSet.get(k),formatQuerySend);
 							} 	
 						}						
 					}
-					if(msgType.equals("REPLY")){
-						++replyReceive;
-						if(waitFlag[getIndex(initProcessName)]) num[getIndex(processName)] -= 1 ;
-						if(num[getIndex(processName)] == 0){
-							if(initProcessName.equals(receiverProcessName)){
-								Thread.sleep(100+rnd.nextInt(401));
-								logMsg("\n\n!!!!!   Deadlock Detected   !!!!!\n");
-							}else{
-								//Send REPLY message to Engaging Query Sender
-								for(int m=0; m < engagingQuerySender.size();++m){
-									Thread.sleep(100+rnd.nextInt(401));
-									msg="REPLY-"+initProcessName+","+processName+","+engagingQuerySender.get(m);
-									byte buffreply[]=msg.getBytes();
-									DatagramPacket dgPacketSend = new DatagramPacket(buffreply,buffreply.length,InetAddress.getLocalHost(),(getIndex(engagingQuerySender.get(m))+1)*1000);
-									dgSocket.send(dgPacketSend);
-									logMsg("\nREPLY("+initProcessName+","+processName+","+engagingQuerySender.get(m)+") sent to Process "+engagingQuerySender.get(m));
-								}								
+					if(msgType.equals("REPLY")){						
+						//++replyReceive;
+						if(waitFlag[getIndex(initProcessName)]) {
+							num[getIndex(initProcessName)] -= 1 ;
+							if(num[getIndex(initProcessName)] == 0){
+								if(initProcessName.equals(receiverProcessName)){
+									Thread.sleep(500+rnd.nextInt(501));
+									logMsg("\n!!!!!   Deadlock Detected   !!!!!",formatDeadlock);
+								}else{
+									//Send REPLY message to Engaging Query Sender
+									for(int m=0; m < engagingQuerySender.size();++m){
+										Thread.sleep(500+rnd.nextInt(501));
+										msg="REPLY-"+initProcessName+","+processName+","+engagingQuerySender.get(m);
+										byte buffreply[]=msg.getBytes();
+										DatagramPacket dgPacketSend = new DatagramPacket(buffreply,buffreply.length,InetAddress.getLocalHost(),(getIndex(engagingQuerySender.get(m))+1)*1000);
+										dgSocket.send(dgPacketSend);		
+										logMsg("REPLY("+initProcessName+","+processName+","+engagingQuerySender.get(m)+") sent to Process "+engagingQuerySender.get(m)+" which sent the engaging query",formatReplySend);
+									}								
+								}
 							}
 						}
 					}
 				}
 			}catch(IOException ex){
-				logMsg(ex.getMessage());
+				logMsg(ex.getMessage(),formatDeadlock);
 			}
 		}
 	}
-	public void logMsg(final String msg) {
+	public void logMsg(final String msg, final SimpleAttributeSet attrib) {
 		SwingUtilities.invokeLater(() -> {
-			logArea.append(msg);
+			//logArea.append(msg+"\n");
+			try
+			{
+				styleDoc.insertString(styleDoc.getLength(), msg+"\n", attrib);
+			}catch(Exception e) { 
+				logMsg(e.getMessage(),formatDeadlock);
+			}
+			
 		});
 	}
 	public int getIndex(String proc) {
