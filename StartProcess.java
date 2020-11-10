@@ -21,7 +21,7 @@ class Process extends JFrame{
 		{0,0,0,1,1,0},
 		{0,0,0,0,1,0},
 		{0,0,0,0,0,1},
-		{0,0,1,0,0,0}
+		{1,0,0,0,0,0}
 	};         
 
 	private final JLabel cmhOR = new JLabel("Deadlock detection Chandy-Misra-Haas Algorithm for the OR model");
@@ -47,12 +47,8 @@ class Process extends JFrame{
 	private final String processName;
 	private ArrayList<String> dependentSet = new ArrayList<String>();
 	private ArrayList<String> engagingQuerySender = new ArrayList<String>();
-	private int querySend;
-	private int replyReceive;
 	Random rnd = new Random();
-	File logFile;
-	PrintStream pStream;
-	    
+	
 	public Process (String pName, int port){
 		super("Process: "+pName+" Port: "+port);
 		super.add(cmhOR, BorderLayout.NORTH);
@@ -77,15 +73,8 @@ class Process extends JFrame{
 		StyleConstants.setBold(formatDeadlock, true);
 		Arrays.fill(waitFlag,false);
 	    processName = pName;
-		replyReceive = 0;
-		querySend = 0;
-		try{
-			logFile = new File("log.txt");
-			pStream = new PrintStream(logFile);
-			System.setOut(pStream);  
-		}catch(FileNotFoundException ex){
-			System.exit(1);
-		}		
+		
+				
 		try{
 			dgSocket = new DatagramSocket((getIndex(pName)+1)*1000);
 			
@@ -107,7 +96,6 @@ class Process extends JFrame{
 					byte buff[]=msg.getBytes();
 					DatagramPacket dgPacketSend = new DatagramPacket(buff,buff.length,InetAddress.getLocalHost(),(getIndex(dependentSet.get(j))+1)*1000);
 					dgSocket.send(dgPacketSend);
-					++querySend;
 					logMsg("QUERY("+pName+","+pName+","+dependentSet.get(j)+") sent to Dependent Process "+dependentSet.get(j),formatQuerySend);
 				}   
 				waitFlag[getIndex(processName)] = true;  
@@ -137,7 +125,6 @@ class Process extends JFrame{
 					if(msgType.equals("QUERY")){
 						if(waitFlag[getIndex(initProcessName)]){
 							Thread.sleep(500+rnd.nextInt(501));
-							//Send REPLY message							
 							msg="REPLY-"+initProcessName+","+processName+","+senderProcessName;
 							byte buffreply[]=msg.getBytes();
 							DatagramPacket dgPacketSend = new DatagramPacket(buffreply,buffreply.length,InetAddress.getLocalHost(),(getIndex(senderProcessName)+1)*1000);
@@ -153,13 +140,11 @@ class Process extends JFrame{
 								byte buffsend[]=msg.getBytes();
 								DatagramPacket dgPacketSend = new DatagramPacket(buffsend,buffsend.length,InetAddress.getLocalHost(),(getIndex(dependentSet.get(k))+1)*1000);
 								dgSocket.send(dgPacketSend);
-								//++querySend;
 								logMsg("QUERY("+initProcessName+","+processName+","+dependentSet.get(k)+") sent to Dependent Process "+dependentSet.get(k),formatQuerySend);
 							} 	
 						}						
 					}
 					if(msgType.equals("REPLY")){						
-						//++replyReceive;
 						if(waitFlag[getIndex(initProcessName)]) {
 							num[getIndex(initProcessName)] -= 1 ;
 							if(num[getIndex(initProcessName)] == 0){
@@ -167,7 +152,6 @@ class Process extends JFrame{
 									Thread.sleep(500+rnd.nextInt(501));
 									logMsg("\n!!!!!   Deadlock Detected   !!!!!",formatDeadlock);
 								}else{
-									//Send REPLY message to Engaging Query Sender
 									for(int m=0; m < engagingQuerySender.size();++m){
 										Thread.sleep(500+rnd.nextInt(501));
 										msg="REPLY-"+initProcessName+","+processName+","+engagingQuerySender.get(m);
@@ -188,7 +172,6 @@ class Process extends JFrame{
 	}
 	public void logMsg(final String msg, final SimpleAttributeSet attrib) {
 		SwingUtilities.invokeLater(() -> {
-			//logArea.append(msg+"\n");
 			try
 			{
 				styleDoc.insertString(styleDoc.getLength(), msg+"\n", attrib);
